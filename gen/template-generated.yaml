@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: A starter AWS Lambda function with SQS and SNS integration
+
+Resources:
+  # Define the SQS queue
+  SQSsneha:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: SQS-sneha
+
+  # Define the SQS queue policy
+  SQSQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: SQSPolicy
+        Statement:
+        - Sid: AllowS3Message
+          Effect: Allow
+          Principal:
+            Service: s3.amazonaws.com
+          Action: sqs:SendMessage
+          Resource:
+            Fn::GetAtt:
+            - SQSsneha
+            - Arn
+          Condition:
+            ArnLike:
+              aws:SourceArn: arn:aws:s3:::sneha-sam
+        - Sid: AllowLambda
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sqs:ReceiveMessage
+          Resource:
+            Fn::GetAtt:
+            - SQSsneha
+            - Arn
+          Condition:
+            ArnEquals:
+              aws:PrincipalArn:
+                Fn::GetAtt:
+                - helloworldpython3
+                - Arn
+      Queues:
+        - Ref: SQSsneha
+
+  # Define the Lambda function
+  helloworldpython3:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      Runtime: python3.9
+      CodeUri: s3://sneha-sam/c9f1dc3ad55a19a9694d4a1c334e0d2e
+      Description: A starter AWS Lambda function
+      MemorySize: 128
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue:
+              Fn::GetAtt:
+              - SQSsneha
+              - Arn
+            BatchSize: 10
+      Environment:
+        Variables:
+          SNS_ARN: !Ref SNSEmail
+      Policies:
+      - SNSPublishMessagePolicy:
+          TopicName: !Ref SNSEmail
+      - CloudWatchPutMetricPolicy: {}
+      - SQSPollerPolicy:
+          QueueName: !Ref SQSsneha
+
+  # Define the SNS topic
+  SNSEmail:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: SNSEmail
+
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: snehatuladhar098@gmail.com
+      Protocol: email
+      TopicArn: !Ref SNSEmail
+
+  # Define the SNS topic policy
+  LambdaSNSPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Id: SNSPolicy
+        Statement:
+        - Sid: AllowLambda
+          Effect: Allow
+          Principal:
+            Service: lambda.amazonaws.com
+          Action: sns:Publish
+          Resource:
+            Ref: SNSEmail
+          Condition:
+            ArnEquals:
+              aws:PrincipalArn:
+                Fn::GetAtt:
+                - helloworldpython3
+                - Arn
+      Topics:
+        - Ref: SNSEmail
+        
+
